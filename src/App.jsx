@@ -531,11 +531,46 @@ const GasTabContent = ({ data }) => {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl lg:rounded-[40px] shadow-sm border border-slate-100 overflow-x-auto">
+      <div className="bg-white rounded-3xl lg:rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 border-b border-slate-50 bg-slate-50/30 font-black text-slate-800 text-xs uppercase tracking-widest">
           Comprehensive Monthly Log (All OP Levels)
         </div>
-        <table className="w-full text-left min-w-[800px]">
+
+        {/* Mobile Card Layout */}
+        <div className="lg:hidden divide-y divide-slate-100">
+          {data.map(m => (
+            <div key={m.month} className="p-4">
+              <p className="font-black text-sm text-slate-900 mb-3">{m.month}</p>
+              <div className="space-y-2">
+                {['0', '50', '100'].map(op => (
+                  <div key={op} className="bg-slate-50 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-slate-400 mb-2">OP = {op}%</p>
+                    <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                      <div>
+                        <p className="text-[8px] font-bold text-slate-400 mb-1">O₂</p>
+                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-bold">{m[`z1_o2_${op}`]}%</span>
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold ml-1">{m[`z2_o2_${op}`]}%</span>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-slate-400 mb-1">CO₂</p>
+                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded font-bold">{m[`z1_co2_${op}`]}%</span>
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold ml-1">{m[`z2_co2_${op}`]}%</span>
+                      </div>
+                      <div>
+                        <p className="text-[8px] font-bold text-slate-400 mb-1">CO</p>
+                        <span className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-bold">{m[`z1_co_${op}`]}</span>
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-bold ml-1">{m[`z2_co_${op}`]}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table Layout */}
+        <table className="w-full text-left hidden lg:table">
           <thead className="bg-[#0f172a] text-white font-black text-[9px] uppercase tracking-widest">
             <tr>
               <th className="px-6 py-4">Month</th>
@@ -592,14 +627,45 @@ const SafetyView = ({ data }) => {
         <SafetyMetricCard label="Firing zone2" value={data[data.length - 1]?.z2} data={data} dataKey="z2" color="#ef4444" />
       </div>
 
-      <div className="bg-white rounded-3xl lg:rounded-[48px] shadow-sm border border-slate-100 overflow-x-auto">
+      <div className="bg-white rounded-3xl lg:rounded-[48px] shadow-sm border border-slate-100 overflow-hidden">
         <div className="p-6 lg:p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
           <h3 className="font-black text-slate-900 text-base lg:text-xl tracking-tighter uppercase">Safety Log</h3>
           <div className="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-[8px] lg:text-[10px] font-black rounded-lg border border-emerald-100 shrink-0 ml-4">
             ACTIVE
           </div>
         </div>
-        <table className="w-full text-left min-w-[700px]">
+
+        {/* Mobile Card Layout */}
+        <div className="lg:hidden divide-y divide-slate-100">
+          {data.map(m => (
+            <div key={m.month} className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="font-black text-sm text-slate-900">{m.month}</p>
+                <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold ${m.safetyRating === 'Perfect' ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${m.safetyRating === 'Perfect' ? 'bg-emerald-500' : 'bg-orange-500'} animate-pulse`}></div>
+                  {m.safetyStatus || m.safetyRating}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-[8px] font-bold text-slate-400 mb-1">Main Gas</p>
+                  <p className="text-xs font-black text-slate-700">{m.main}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-[8px] font-bold text-slate-400 mb-1">Zone 1</p>
+                  <p className="text-xs font-black text-slate-700">{m.z1}</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 text-center">
+                  <p className="text-[8px] font-bold text-slate-400 mb-1">Zone 2</p>
+                  <p className="text-xs font-black text-slate-700">{m.z2}</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table Layout */}
+        <table className="w-full text-left hidden lg:table">
           <thead className="text-[9px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
             <tr>
               <th className="px-8 py-5">Month</th>
