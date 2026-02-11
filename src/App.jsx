@@ -205,14 +205,14 @@ const App = () => {
           <div className={`space-y-6 transition-all duration-700 flex flex-col items-center w-full ${sidebarOpen ? 'px-1 opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'}`}>
             <div className="group w-full">
               <label className="text-[10px] font-black text-slate-500 mb-2 block uppercase tracking-wider group-hover:text-orange-500 transition-colors">KILN</label>
-              <select value={effectiveFurnace} onChange={(e) => setSelectedFurnace(e.target.value)} className="w-full bg-[#1e293b] border border-slate-700/50 text-xs p-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all cursor-pointer shadow-inner text-slate-200">
-                {uniqueFurnaces.map(f => <option key={f} value={f} className="text-slate-900">{f}</option>)}
+              <select value={effectiveFurnace} onChange={(e) => setSelectedFurnace(e.target.value)} className="w-full bg-[#1e293b] border border-slate-700/50 text-xs p-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all cursor-pointer shadow-inner text-white">
+                {uniqueFurnaces.map(f => <option key={f} value={f} className="bg-white text-slate-900">{f}</option>)}
               </select>
             </div>
             <div className="group w-full">
               <label className="text-[10px] font-black text-slate-500 mb-2 block uppercase tracking-wider group-hover:text-orange-500 transition-colors">Month</label>
-              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full bg-[#1e293b] border border-slate-700/50 text-xs p-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all cursor-pointer shadow-inner text-slate-200">
-                {uniqueMonths.map(m => <option key={m} value={m} className="text-slate-900">{m}</option>)}
+              <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="w-full bg-[#1e293b] border border-slate-700/50 text-xs p-3 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none transition-all cursor-pointer shadow-inner text-white">
+                {uniqueMonths.map(m => <option key={m} value={m} className="bg-white text-slate-900">{m}</option>)}
               </select>
             </div>
           </div>
