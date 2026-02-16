@@ -3,14 +3,19 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, Cell
 } from 'recharts';
 import {
-  Thermometer, Wind, ShieldCheck, ShieldAlert, RefreshCw, LayoutDashboard, Menu, X, Waves, BarChart3, Filter, ChevronRight, ChevronDown, AlertCircle, Clock, Table as TableIcon, Activity
+  Thermometer, Wind, ShieldCheck, ShieldAlert, RefreshCw, LayoutDashboard, Menu, X, Waves, BarChart3, Filter, ChevronRight, ChevronDown, AlertCircle, Clock, Table as TableIcon, Activity, LogOut
 } from 'lucide-react';
 import Papa from 'papaparse';
 import axios from 'axios';
+import LoginScreen from './LoginScreen';
 
 const DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mB3Cb6GVbPVI_mK2q7BRWlvgXSikxS7ZvA-0_8_T7WY/export?format=csv&gid=356457835";
+// Use Environment Variable for security. Falls back to your current URL if not set.
+const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || "https://script.google.com/macros/s/AKfycbzkxKRNNnRdgLzQ-W1V-2UX4c56whGSv5kmugWNC2U1CmVNvBDlr9WMEgLZ0d6ivCkEDg/exec";
+const AUTH_KEY = "furnace_auth_token";
 
 const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false); // Default closed on mobile
@@ -20,6 +25,72 @@ const App = () => {
   // Filters
   const [selectedFurnace, setSelectedFurnace] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
+
+  useEffect(() => {
+    // Check both local and session storage for persistent vs temporary session
+    const token = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY);
+    if (token === 'valid') {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = async (username, password, rememberMe = false) => {
+    try {
+      const response = await axios.post(AUTH_API_URL, {
+        action: 'login',
+        username,
+        password
+      }, {
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Crucial for Apps Script CORS
+      });
+
+      if (response.data.success) {
+        // Use localStorage for persistence, sessionStorage for temporary sessions
+        if (rememberMe) {
+          localStorage.setItem(AUTH_KEY, 'valid');
+        } else {
+          sessionStorage.setItem(AUTH_KEY, 'valid');
+        }
+        setIsAuthenticated(true);
+        return { success: true };
+      }
+      return { success: false, message: response.data.message };
+    } catch (err) {
+      console.error("Login error:", err);
+      return { success: false, message: "System error: Check console" };
+    }
+  };
+
+  const handleRegister = async (username, password) => {
+    if (AUTH_API_URL === "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
+      return { success: false, message: "API URL not configured" };
+    }
+
+    try {
+      const response = await axios.post(AUTH_API_URL, {
+        action: 'register',
+        username,
+        password
+      }, {
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      });
+
+      if (response.data.success) {
+        return { success: true };
+      }
+      return { success: false, message: response.data.message };
+    } catch (err) {
+      console.error("Registration error:", err);
+      return { success: false, message: "System error: Check console" };
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem(AUTH_KEY);
+    sessionStorage.removeItem(AUTH_KEY);
+    setIsAuthenticated(false);
+  };
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -53,10 +124,12 @@ const App = () => {
   };
 
   useEffect(() => {
-    fetchData();
-    // Auto-open sidebar on larger screens
-    if (window.innerWidth >= 1024) setSidebarOpen(true);
-  }, []);
+    if (isAuthenticated) {
+      fetchData();
+      // Auto-open sidebar on larger screens
+      if (window.innerWidth >= 1024) setSidebarOpen(true);
+    }
+  }, [isAuthenticated]);
 
   const uniqueFurnaces = useMemo(() => {
     const furnaces = [...new Set(data.map(row => String(row['ชื่อเตา'] || '').trim()).filter(Boolean))];
@@ -140,6 +213,10 @@ const App = () => {
     }).filter(Boolean);
   }, [data, effectiveFurnace]);
 
+  if (!isAuthenticated) {
+    return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />;
+  }
+
   return (
     <div className="min-h-screen flex bg-[#f8fafc] font-thai transition-colors duration-500 overflow-x-hidden">
       {/* Mobile Overlay */}
@@ -219,7 +296,17 @@ const App = () => {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="mt-auto pt-6 border-t border-slate-800/50 w-full mb-2">
+        <div className="mt-auto pt-6 border-t border-slate-800/50 w-full mb-2 space-y-3">
+          <button
+            onClick={handleLogout}
+            className={`flex items-center mx-auto transition-all duration-300 group/logout ${sidebarOpen ? 'w-full px-4 py-2 gap-3 hover:bg-red-500/10 rounded-xl' : 'w-10 h-10 justify-center hover:bg-red-500/10 rounded-xl'}`}
+          >
+            <LogOut size={18} className="text-slate-500 group-hover/logout:text-red-500 transition-colors" />
+            <span className={`text-[10px] font-bold text-slate-500 uppercase tracking-widest group-hover/logout:text-red-500 transition-all overflow-hidden whitespace-nowrap ${sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'}`}>
+              Sign Out
+            </span>
+          </button>
+
           <div className={`flex items-center p-2 bg-slate-800/30 rounded-2xl border border-slate-700/30 transition-all duration-500 ${sidebarOpen ? 'gap-3' : 'justify-center w-12 h-12 mx-auto'}`}>
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-400 to-red-600 flex items-center justify-center text-white font-black shadow-lg shrink-0">
               {String(latestEntry['ผู้ตรวจสอบ'] || 'U')[0]}
