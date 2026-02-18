@@ -7,15 +7,14 @@ import {
 } from 'lucide-react';
 import Papa from 'papaparse';
 import axios from 'axios';
+import { supabase } from './supabase';
 import LoginScreen from './LoginScreen';
 
 const DEFAULT_SHEET_URL = "https://docs.google.com/spreadsheets/d/1mB3Cb6GVbPVI_mK2q7BRWlvgXSikxS7ZvA-0_8_T7WY/export?format=csv&gid=356457835";
-// Use Environment Variable for security. Falls back to your current URL if not set.
-const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || "https://script.google.com/macros/s/AKfycbzkxKRNNnRdgLzQ-W1V-2UX4c56whGSv5kmugWNC2U1CmVNvBDlr9WMEgLZ0d6ivCkEDg/exec";
-const AUTH_KEY = "furnace_auth_token";
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false); // Default closed on mobile
@@ -27,68 +26,193 @@ const App = () => {
   const [selectedMonth, setSelectedMonth] = useState('All');
 
   useEffect(() => {
-    // Check both local and session storage for persistent vs temporary session
-    const token = localStorage.getItem(AUTH_KEY) || sessionStorage.getItem(AUTH_KEY);
-    if (token === 'valid') {
-      setIsAuthenticated(true);
+    // 1. Initial check for Sheets session
+    const sheetsSession = localStorage.getItem('sheets_session');
+    if (sheetsSession) {
+      try {
+        const profile = JSON.parse(sheetsSession);
+        setUserProfile(profile);
+        setIsAuthenticated(true);
+      } catch (e) {
+        localStorage.removeItem('sheets_session');
+      }
     }
+
+    // 2. Supabase Auth Listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth Event:", event, session?.user?.email);
+
+      if (session) {
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (error && error.code === 'PGRST116') return;
+
+          if (error || !profile || profile.status !== 'APPROVED') {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              console.log("User access restricted, signing out...");
+              await supabase.auth.signOut();
+            }
+            if (!localStorage.getItem('sheets_session')) {
+              setIsAuthenticated(false);
+            }
+            return;
+          }
+
+          if (event === 'SIGNED_IN') {
+            await recordLoginLog(session.user);
+          }
+
+          setUserProfile(profile);
+          setIsAuthenticated(true);
+        } catch (err) {
+          console.error("Auth state processing error:", err);
+        }
+      } else {
+        // Only lose auth if sheets session isn't there
+        if (!localStorage.getItem('sheets_session')) {
+          setIsAuthenticated(false);
+          setUserProfile(null);
+        }
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (username, password, rememberMe = false) => {
+  const recordLoginLog = async (user) => {
     try {
-      const response = await axios.post(AUTH_API_URL, {
-        action: 'login',
-        username,
-        password
-      }, {
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' } // Crucial for Apps Script CORS
+      // Try to get username from profile first
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+
+      const displayName = profile?.username || user.email.split('@')[0];
+
+      await supabase.from('login_history').insert({
+        user_id: user.id,
+        username: displayName,
+        user_agent: navigator.userAgent
+      });
+    } catch (err) {
+      console.error("Log error:", err);
+    }
+  };
+
+
+  const handleLogin = async (username, password) => {
+    try {
+      console.log("Attempting Username login via Sheets:", username);
+      const AUTH_API = import.meta.env.VITE_AUTH_API_URL;
+
+      // Using a simpler request configuration to avoid CORS preflight issues with GAS
+      const response = await axios({
+        method: 'post',
+        url: AUTH_API,
+        data: JSON.stringify({
+          action: 'login',
+          username,
+          password
+        }),
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        timeout: 10000 // 10 second timeout
       });
 
-      if (response.data.success) {
-        // Use localStorage for persistence, sessionStorage for temporary sessions
-        if (rememberMe) {
-          localStorage.setItem(AUTH_KEY, 'valid');
-        } else {
-          sessionStorage.setItem(AUTH_KEY, 'valid');
+      if (response.data && response.data.success) {
+        // Use returned user data or fallback to basic info
+        const userData = response.data.user || { username, status: 'APPROVED' };
+
+        if (userData.status !== 'APPROVED') {
+          return { success: false, message: "Account pending approval" };
         }
+
+        localStorage.setItem('sheets_session', JSON.stringify(userData));
+        setUserProfile(userData);
         setIsAuthenticated(true);
         return { success: true };
+      } else {
+        return { success: false, message: response.data?.message || "Invalid credentials" };
       }
-      return { success: false, message: response.data.message };
     } catch (err) {
-      console.error("Login error:", err);
-      return { success: false, message: "System error: Check console" };
+      console.error("Sheets Login error:", err);
+      // Show actual error message for debugging
+      return { success: false, message: `Connection error: ${err.message}` };
     }
   };
 
-  const handleRegister = async (username, password) => {
-    if (AUTH_API_URL === "PASTE_YOUR_APPS_SCRIPT_URL_HERE") {
-      return { success: false, message: "API URL not configured" };
-    }
-
+  const handleRegister = async (username, email, password) => {
     try {
-      const response = await axios.post(AUTH_API_URL, {
-        action: 'register',
-        username,
-        password
-      }, {
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      console.log("Attempting registration via Sheets:", username);
+      const AUTH_API = import.meta.env.VITE_AUTH_API_URL;
+
+      const response = await axios({
+        method: 'post',
+        url: AUTH_API,
+        data: JSON.stringify({
+          action: 'register',
+          username,
+          email,
+          password
+        }),
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        timeout: 10000
       });
 
-      if (response.data.success) {
+      if (response.data && response.data.success) {
         return { success: true };
+      } else {
+        return { success: false, message: response.data?.message || "Registration failed" };
       }
-      return { success: false, message: response.data.message };
     } catch (err) {
-      console.error("Registration error:", err);
-      return { success: false, message: "System error: Check console" };
+      console.error("Sheets Register error:", err);
+      return { success: false, message: `Connection error: ${err.message}` };
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(AUTH_KEY);
-    sessionStorage.removeItem(AUTH_KEY);
-    setIsAuthenticated(false);
+  const handleSocialLogin = async (provider) => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+    } catch (err) {
+      console.error("Social login error:", err);
+      alert(err.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      console.log("Starting sign out process...");
+      // 1. Clear local session first to prevent listener from re-authenticating
+      localStorage.removeItem('sheets_session');
+
+      // 2. Clear local state immediately for instant UI feedback
+      setIsAuthenticated(false);
+      setUserProfile(null);
+
+      // 3. Perform Supabase sign out
+      await supabase.auth.signOut();
+      console.log("Sign out completed.");
+    } catch (err) {
+      console.error("Sign out error:", err);
+      // Ensure state is cleared even if Supabase sign out fails
+      setIsAuthenticated(false);
+      setUserProfile(null);
+    }
   };
 
 
@@ -214,7 +338,8 @@ const App = () => {
   }, [data, effectiveFurnace]);
 
   if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />;
+    return <LoginScreen onLogin={handleLogin} onRegister={handleRegister} onSocialLogin={handleSocialLogin} />
+      ;
   }
 
   return (
